@@ -201,7 +201,7 @@ get_words=function(cityname,rivername){
 
 Now we can run the `get_words()` function through:
 
-```{run_get_words}
+```{r, run_get_words}
 tib_city_river %>% 
   mutate(data=purrr::map2(city,river,get_words))
 ```

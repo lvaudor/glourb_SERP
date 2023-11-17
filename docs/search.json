@@ -1,0 +1,44 @@
+[
+  {
+    "objectID": "about.html",
+    "href": "about.html",
+    "title": "About",
+    "section": "",
+    "text": "This site shows the SERP (Search Engine Results Pages) data for the GloUrb project are collected."
+  },
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "serpentine",
+    "section": "",
+    "text": "library(tidyverse)\n\n── Attaching core tidyverse packages ──────────────────────── tidyverse 2.0.0 ──\n✔ dplyr     1.1.2     ✔ readr     2.1.4\n✔ forcats   1.0.0     ✔ stringr   1.5.0\n✔ ggplot2   3.4.2     ✔ tibble    3.2.1\n✔ lubridate 1.9.2     ✔ tidyr     1.3.0\n✔ purrr     1.0.1     \n── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──\n✖ dplyr::filter() masks stats::filter()\n✖ dplyr::lag()    masks stats::lag()\nℹ Use the conflicted package (&lt;http://conflicted.r-lib.org/&gt;) to force all conflicts to become errors\n\nlibrary(httr)\nlibrary(jsonlite)\n\n\nAttachement du package : 'jsonlite'\n\nL'objet suivant est masqué depuis 'package:purrr':\n\n    flatten\n\nlibrary(tidytext)"
+  },
+  {
+    "objectID": "index.html#city-river-combinations",
+    "href": "index.html#city-river-combinations",
+    "title": "serpentine",
+    "section": "City-river combinations",
+    "text": "City-river combinations\nLet’s create a table with all considered city-river-country combinations:\n\ntib_city_river=bind_rows(\n  tibble_row(city=\"Delhi\",river=\"Yamuna\", gl=\"in\"),\n  tibble_row(city=\"Lyon\",river=\"Rhone\", gl=\"fr\"),\n  tibble_row(city=\"Ahmedabad\",river=\"Sabarmati\", gl=\"in\"),\n  tibble_row(city=\"Khartoum\",river=\"Nile\",gl=\"sd\"),\n  tibble_row(city=\"Bamako\",river=\"Niger\", gl=\"ml\"),\n  tibble_row(city=\"Bangui\",river=\"Ubangi\", gl=\"cf\"),\n  tibble_row(city=\"Cairo\",river=\"Nile\", gl=\"eg\"),\n  tibble_row(city=\"Denver\",river=\"South Platte\", gl=\"us\"),\n  tibble_row(city=\"Ho Chi Minh\",river=\"Saigon\", gl=\"vn\"),\n  tibble_row(city=\"Kinshasa\",river=\"Congo\",gl=\"cd\"),\n  tibble_row(city=\"Lahore\",river=\"Ravi\",gl=\"pk\"),\n  tibble_row(city=\"Lhasa\",river=\"Kyi\",gl=\"cn\"),\n  tibble_row(city=\"N'Djamena\",river=\"Chari\", gl=\"td\"),\n  tibble_row(city=\"Niamey\",river=\"Niger\", gl=\"ne\"),\n  tibble_row(city=\"Palembang\",river=\"Musi\",gl=\"id\")\n)"
+  },
+  {
+    "objectID": "index.html#how-to-authenticate-for-the-value-serp-api",
+    "href": "index.html#how-to-authenticate-for-the-value-serp-api",
+    "title": "serpentine",
+    "section": "How to authenticate for the Value SERP API",
+    "text": "How to authenticate for the Value SERP API\n\nCreate an account on the Value SERP API. They will provide you with an API key.\nOpen your R environment through usethis::edit_r_environ() (this command will open it in the RStudio editor).\nWrite this line in your R environment:\n\n\nVALUE_SERP=\"copy_here_your_VALUE_SERP_API_key\"\n\nNow you will be able to access this key from any of your scripts through:\n\nvalue_serp_api_key=Sys.getenv(\"VALUE_SERP\")"
+  },
+  {
+    "objectID": "index.html#collect-raw-data",
+    "href": "index.html#collect-raw-data",
+    "title": "serpentine",
+    "section": "Collect raw data",
+    "text": "Collect raw data\nWe define a function, get_serpentine_data() which collects SERP results for a given city name and river name. The parameter “gl” corresponds to the country (2-letters code) from which the Google search is presumably run.\n\nget_serpentine_data=function(cityname,rivername,gl=\"us\"){\n    file=glue::glue(\"data/data_RDS/res_{cityname}_{rivername}.RDS\")\n          if(!file.exists(file)){\n          # Parameters list\n          q=paste0(rivername,\"+river+\",cityname)\n          params = list(\n            `api_key` = value_serp_api_key,\n            `q` = q,\n            `gl` = gl,\n            `hl` = \"en\",\n            `num` = 100,\n            `google_domain` = 'google.fr'\n          )\n          # q : the search query\n          # gl : 2 letter country code \n          # hl : language code\n          # num : number of result asked\n          \n          # ask for the data\n          res &lt;- httr::GET(url = 'https://api.valueserp.com/search', query = params)\n          saveRDS(res,file=file)\n    } # if the file already exists no API request is carried out\n}\n\nThe query results are saved in a directory “data/data_RDS/” (and are not re-generated unless the corresponding .RDS files are suppressed).\n\nif(!dir.exists(\"data/data_RDS\")){dir.create(\"data/data_RDS\")}\ntib_city_river %&gt;% \n  mutate(data=purrr::pmap(list(cityname=city,\n                               rivername=river,\n                               gl=gl),\n                          get_serpentine_data))\n\n# A tibble: 15 × 4\n   city        river        gl    data  \n   &lt;chr&gt;       &lt;chr&gt;        &lt;chr&gt; &lt;list&gt;\n 1 Delhi       Yamuna       in    &lt;NULL&gt;\n 2 Lyon        Rhone        fr    &lt;NULL&gt;\n 3 Ahmedabad   Sabarmati    in    &lt;NULL&gt;\n 4 Khartoum    Nile         sd    &lt;NULL&gt;\n 5 Bamako      Niger        ml    &lt;NULL&gt;\n 6 Bangui      Ubangi       cf    &lt;NULL&gt;\n 7 Cairo       Nile         eg    &lt;NULL&gt;\n 8 Denver      South Platte us    &lt;NULL&gt;\n 9 Ho Chi Minh Saigon       vn    &lt;NULL&gt;\n10 Kinshasa    Congo        cd    &lt;NULL&gt;\n11 Lahore      Ravi         pk    &lt;NULL&gt;\n12 Lhasa       Kyi          cn    &lt;NULL&gt;\n13 N'Djamena   Chari        td    &lt;NULL&gt;\n14 Niamey      Niger        ne    &lt;NULL&gt;\n15 Palembang   Musi         id    &lt;NULL&gt;"
+  },
+  {
+    "objectID": "index.html#clean-raw-data",
+    "href": "index.html#clean-raw-data",
+    "title": "serpentine",
+    "section": "Clean raw data",
+    "text": "Clean raw data\nWe now define the function get_serpentine_tibble, which takes the raw results as returned by the API and create .csv data tables (findable in directory data/data_R)\n\nget_serpentine_tibble=function(cityname,rivername){\n# translate to string\n    res=readRDS(file=glue::glue(\"data/data_RDS/res_{cityname}_{rivername}.RDS\"))\n\n    res_text &lt;- httr::content(res, \"text\")\n    \n    # translate to a more readable format\n    res_json &lt;- jsonlite::fromJSON(res_text, flatten = TRUE)\n    res_tib=res_json[[\"organic_results\"]]\n    if(is.null(res_tib)){res_tib=tibble::tibble(\"Result\"=\"NoData\")}\n    readr::write_csv(res_tib,\n                     glue::glue(\"data/data_serp/tib_{cityname}.csv\"))\n    return(res_tib)\n}\n\nNow format all RDS results as a single table we could do:\n\ntib_serp &lt;- tib_city_river %&gt;% \n  group_by(city,river) %&gt;% \n  tidyr::nest() %&gt;% \n  mutate(data=purrr::map2(city,river,get_serpentine_tibble)) %&gt;% \n  tidyr::unnest(cols=\"data\")"
+  }
+]
