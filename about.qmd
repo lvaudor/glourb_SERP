@@ -1,0 +1,5 @@
+---
+title: "About"
+---
+
+This site shows the SERP (Search Engine Results Pages) data for the GloUrb project are collected.

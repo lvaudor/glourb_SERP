@@ -1,0 +1,207 @@
+---
+title: "serpentine"
+---
+
+```{r setup}
+library(tidyverse)
+library(httr)
+library(jsonlite)
+library(tidytext)
+```
+
+# Aims
+
+This document aims at showing how the Value SERP API can be used to collect data relative to google searches on keywords corresponding to the combination of {city name} + {river name} + "river".
+
+The link to the API website is [here](https://get.valueserp.com/try-it-free/)
+
+## City-river combinations
+
+Let's create a table with all considered city-river-country combinations:
+
+```{r tib_city_river}
+tib_city_river=bind_rows(
+  tibble_row(city="Delhi",river="Yamuna", gl="in"),
+  tibble_row(city="Lyon",river="Rhone", gl="fr"),
+  tibble_row(city="Ahmedabad",river="Sabarmati", gl="in"),
+  tibble_row(city="Khartoum",river="Nile",gl="sd"),
+  tibble_row(city="Bamako",river="Niger", gl="ml"),
+  tibble_row(city="Bangui",river="Ubangi", gl="cf"),
+  tibble_row(city="Cairo",river="Nile", gl="eg"),
+  tibble_row(city="Denver",river="South Platte", gl="us"),
+  tibble_row(city="Ho Chi Minh",river="Saigon", gl="vn"),
+  tibble_row(city="Kinshasa",river="Congo",gl="cd"),
+  tibble_row(city="Lahore",river="Ravi",gl="pk"),
+  tibble_row(city="Lhasa",river="Kyi",gl="cn"),
+  tibble_row(city="N'Djamena",river="Chari", gl="td"),
+  tibble_row(city="Niamey",river="Niger", gl="ne"),
+  tibble_row(city="Palembang",river="Musi",gl="id")
+)
+```
+
+## How to authenticate for the Value SERP API
+
+1) Create an account on the Value SERP API. They will provide you with an API key.
+2) Open your R environment through usethis::edit_r_environ() (this command will open it in the RStudio editor).
+3) Write this line in your R environment:
+
+```{r save_api_key, eval=FALSE}
+VALUE_SERP="copy_here_your_VALUE_SERP_API_key"
+```
+
+Now you will be able to access this key from any of your scripts through:
+
+```{r get_api_key}
+value_serp_api_key=Sys.getenv("VALUE_SERP")
+```
+
+# Collection of data
+
+## Collect raw data
+
+We define a function, `get_serpentine_data()` which collects SERP results for a given city name and river name. The parameter "gl" corresponds to the country (2-letters code) from which the Google search is presumably run.
+
+```{r def_get_serpentine_data}
+get_serpentine_data=function(cityname,rivername,gl="us"){
+    file=glue::glue("data/data_RDS/res_{cityname}_{rivername}.RDS")
+          if(!file.exists(file)){
+          # Parameters list
+          q=paste0(rivername,"+river+",cityname)
+          params = list(
+            `api_key` = value_serp_api_key,
+            `q` = q,
+            `gl` = gl,
+            `hl` = "en",
+            `num` = 100,
+            `google_domain` = 'google.fr'
+          )
+          # q : the search query
+          # gl : 2 letter country code 
+          # hl : language code
+          # num : number of result asked
+          
+          # ask for the data
+          res <- httr::GET(url = 'https://api.valueserp.com/search', query = params)
+          saveRDS(res,file=file)
+    } # if the file already exists no API request is carried out
+}
+```
+
+The query results are saved in a directory "data/data_RDS/" (and are not re-generated unless the corresponding .RDS files are suppressed).
+
+
+```{r run_get_serpentine_data}
+if(!dir.exists("data/data_RDS")){dir.create("data/data_RDS")}
+tib_city_river %>% 
+  mutate(data=purrr::pmap(list(cityname=city,
+                               rivername=river,
+                               gl=gl),
+                          get_serpentine_data))
+
+```
+
+## Clean raw data
+
+We now define the function `get_serpentine_tibble`, which takes the raw results as returned by the API and create .csv data tables (findable in directory data/data_R)
+
+```{r def_get_serpentine_tibble}
+get_serpentine_tibble=function(cityname,rivername){
+# translate to string
+    res=readRDS(file=glue::glue("data/data_RDS/res_{cityname}_{rivername}.RDS"))
+
+    res_text <- httr::content(res, "text")
+    
+    # translate to a more readable format
+    res_json <- jsonlite::fromJSON(res_text, flatten = TRUE)
+    res_tib=res_json[["organic_results"]]
+    if(is.null(res_tib)){res_tib=tibble::tibble("Result"="NoData")}
+    readr::write_csv(res_tib,
+                     glue::glue("data/data_serp/tib_{cityname}.csv"))
+    return(res_tib)
+}
+```
+
+Now format all RDS results as a single table we could do:
+
+```{r run_get_serpentine_tibble}
+tib_serp <- tib_city_river %>% 
+  group_by(city,river) %>% 
+  tidyr::nest() %>% 
+  mutate(data=purrr::map2(city,river,get_serpentine_tibble)) %>% 
+  tidyr::unnest(cols="data")
+```
+
+# Pre-process textual data
+
+Now, we actually want to process the data extracted through `get_serpentine_tibble()` to be able to quantify the frequency of terms.
+
+To do that, we define a function `get_words()` which will make use of an English lexicon:
+
+```{r get_lexicon}
+lexen=mixr::get_lexicon("en")
+```
+
+```{r def_get_words}
+get_words=function(cityname,rivername){
+  # first, get tibble with results
+  tib=get_serpentine_tibble(cityname,rivername)
+  # try and get all geonames 
+  #(and deal with special characters in geographic names)
+  geonames=tib %>% 
+    mutate(snippet=str_replace_all(snippet,"Rhône","Rhone")) %>% 
+    mutate(snippet=str_replace_all(snippet,"Saône","Saone")) %>% 
+    # we consider the words starting with a capital letter
+    # that are not situated right after a punctuation sign
+    mutate(word=str_extract_all(snippet,"(?<![:punct:])[A-Z][a-z]*")) %>% 
+    select(word) %>% 
+    tidyr::unnest(cols=c(word)) %>% 
+    mutate(basis=str_to_lower(word)) %>%
+    group_by(word, basis) %>% 
+    summarise(n=n()) %>% 
+    arrange(desc(n)) %>% 
+    # see if these capitalized words appear (uncapitalized) in the lexicon
+    left_join(lexen,by=c("basis"="word")) %>% 
+    # if not, then we can probably consider they are geographical names
+    filter(is.na(type)) %>% 
+    select(word,n) %>% 
+    mutate(geoname=TRUE)
+  
+  # Now, we consider all words
+  tib_words=tib %>% 
+    unnest_tokens(word, snippet, to_lower=FALSE) %>% 
+    left_join(lexen,by="word") %>% 
+    # we only keep those that correspond to nouns, verbs or adjectives
+    mutate(righttype=type %in% c("nom", "ver", "adj")) %>% 
+    mutate(capitalized=stringr::str_detect(word,"[A-Z][a-z]*")) %>% 
+    # we keep the nouns-verbs-abjectives OR the capitalized terms
+    filter(righttype|(capitalized & is.na(type))) %>% 
+    group_by(lemma) %>% 
+    summarise(n=n()) %>% 
+    arrange(desc(n)) %>% 
+    select(word=lemma, n) %>% 
+    na.omit() %>% 
+    mutate(geoname=FALSE) %>% 
+    bind_rows(geonames) %>% 
+    filter(!(word %in% c(cityname,rivername,"river"))) %>% 
+    filter(!(word %in% c("Jan","Feb","Mar","Apr","May","Jun",
+                     "Jul","Aug","Sept","Oct","Nov","Dec",
+                     "January","February","March","April",
+                     "June","July","August","September",
+                     "October","November","December",
+                     "Monday","Tuesday","Wednesday",
+                     "Thursday","Friday","Saturday","Sunday"))) %>%
+  arrange(desc(n)) %>% 
+    na.omit()
+  
+  readr::write_csv(tib_words,
+                   glue::glue("data/data_words/tib_{cityname}.csv"))
+  return(tib_words)
+}
+```
+
+Now we can run the `get_words()` function through:
+
+```{run_get_words}
+tib_city_river %>% 
+  mutate(data=purrr::map2(city,river,get_words))
+```
