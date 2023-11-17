@@ -141,6 +141,13 @@ To do that, we define a function `get_words()` which will make use of an English
 lexen=mixr::get_lexicon("en")
 ```
 
+Here are the lexicon's first lines:
+
+```{r head_lexen}
+head(lexen)
+```
+
+
 ```{r def_get_words}
 get_words=function(cityname,rivername){
   # first, get tibble with results
